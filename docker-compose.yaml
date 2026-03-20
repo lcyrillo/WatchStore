@@ -1,0 +1,47 @@
+services:
+  watch-db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=WatchStore@StrongPass2026
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'WatchStore@StrongPass2026' -Q 'SELECT 1' -b -C"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  ordering-api:
+    build: 
+      context: .
+      dockerfile: Ordering.API/Dockerfile
+    ports:
+      - "5002:8080"
+    environment:
+      - ConnectionStrings__DefaultConnection=Server=watch-db;Database=OrdersDb;User Id=sa;Password=WatchStore@StrongPass2026;TrustServerCertificate=True
+      - RabbitMQ__Host=rabbitmq
+    depends_on:
+      watch-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  catalog-api:
+    build:
+      context: .
+      dockerfile: Catalog.API/Dockerfile
+    ports:
+      - "5001:8080"  # <--- ACESSE NO WINDOWS POR: http://localhost:5001
+    environment:
+      - MT_LICENSE=MT-FREE # <--- ADICIONE ESTA LINHA
+      - ConnectionStrings__DefaultConnection=Server=watch-db;Database=CatalogDb;User Id=sa;Password=WatchStore@StrongPass2026;TrustServerCertificate=True
+      - RabbitMQ__Host=rabbitmq
+    depends_on:
+      - watch-db
